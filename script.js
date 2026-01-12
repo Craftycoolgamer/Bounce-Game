@@ -7,17 +7,199 @@ let myPlayerId = null;
 let mySquareId = null;
 let socket = null;
 let gameArea = null;
+let viewport = null;
 
-// Connect to server with player info
-function connectToServer(playerColor) {
+// Pan and zoom state
+let panState = {
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    translateX: 0,
+    translateY: 0
+};
+
+let zoomState = {
+    scale: 1,
+    minScale: 0.1,
+    maxScale: 5
+};
+
+// Initialize pan and zoom
+function initializePanZoom() {
+    viewport = document.getElementById('viewport');
+    if (!viewport) return;
+
+    // Calculate initial scale to fit viewport
+    const initialScale = Math.min(
+        window.innerWidth / 1920,
+        window.innerHeight / 1080
+    );
+    zoomState.scale = initialScale;
+    
+    // Center the game area initially
+    panState.translateX = (window.innerWidth - 1920 * initialScale) / 2;
+    panState.translateY = (window.innerHeight - 1080 * initialScale) / 2;
+    
+    updateTransform();
+
+    // Mouse drag handlers
+    viewport.addEventListener('mousedown', handleMouseDown);
+    viewport.addEventListener('mousemove', handleMouseMove);
+    viewport.addEventListener('mouseup', handleMouseUp);
+    viewport.addEventListener('mouseleave', handleMouseUp);
+
+    // Mouse wheel zoom
+    viewport.addEventListener('wheel', handleWheel, { passive: false });
+
+    // Touch handlers for mobile
+    viewport.addEventListener('touchstart', handleTouchStart, { passive: false });
+    viewport.addEventListener('touchmove', handleTouchMove, { passive: false });
+    viewport.addEventListener('touchend', handleTouchEnd);
+}
+
+function updateTransform() {
+    if (!gameArea) return;
+    gameArea.style.transform = `translate(${panState.translateX}px, ${panState.translateY}px) scale(${zoomState.scale})`;
+}
+
+function handleMouseDown(e) {
+    // Don't start drag if clicking on interactive elements
+    if (e.target !== viewport && e.target !== gameArea && !e.target.closest('#gameArea')) {
+        return;
+    }
+    panState.isDragging = true;
+    panState.startX = e.clientX - panState.translateX;
+    panState.startY = e.clientY - panState.translateY;
+    viewport.classList.add('dragging');
+    e.preventDefault();
+}
+
+function handleMouseMove(e) {
+    if (!panState.isDragging) return;
+    panState.translateX = e.clientX - panState.startX;
+    panState.translateY = e.clientY - panState.startY;
+    updateTransform();
+    e.preventDefault();
+}
+
+function handleMouseUp(e) {
+    if (panState.isDragging) {
+        panState.isDragging = false;
+        viewport.classList.remove('dragging');
+    }
+}
+
+function handleWheel(e) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    const newScale = Math.max(
+        zoomState.minScale,
+        Math.min(zoomState.maxScale, zoomState.scale + delta)
+    );
+    
+    // Zoom towards mouse position
+    const rect = viewport.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // Calculate zoom point in game coordinates
+    const gameX = (mouseX - panState.translateX) / zoomState.scale;
+    const gameY = (mouseY - panState.translateY) / zoomState.scale;
+    
+    zoomState.scale = newScale;
+    
+    // Adjust pan to zoom towards mouse
+    panState.translateX = mouseX - gameX * zoomState.scale;
+    panState.translateY = mouseY - gameY * zoomState.scale;
+    
+    updateTransform();
+}
+
+// Touch handlers for mobile support
+let touchState = {
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    lastDistance: 0,
+    initialScale: 1,
+    initialTranslateX: 0,
+    initialTranslateY: 0
+};
+
+function handleTouchStart(e) {
+    if (e.touches.length === 1) {
+        // Single touch - pan
+        const touch = e.touches[0];
+        touchState.isDragging = true;
+        touchState.startX = touch.clientX - panState.translateX;
+        touchState.startY = touch.clientY - panState.translateY;
+        viewport.classList.add('dragging');
+    } else if (e.touches.length === 2) {
+        // Two touches - zoom
+        touchState.isDragging = false;
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        touchState.lastDistance = Math.hypot(
+            touch2.clientX - touch1.clientX,
+            touch2.clientY - touch1.clientY
+        );
+        touchState.initialScale = zoomState.scale;
+        touchState.initialTranslateX = panState.translateX;
+        touchState.initialTranslateY = panState.translateY;
+    }
+    e.preventDefault();
+}
+
+function handleTouchMove(e) {
+    if (e.touches.length === 1 && touchState.isDragging) {
+        // Single touch - pan
+        const touch = e.touches[0];
+        panState.translateX = touch.clientX - touchState.startX;
+        panState.translateY = touch.clientY - touchState.startY;
+        updateTransform();
+    } else if (e.touches.length === 2) {
+        // Two touches - zoom
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const distance = Math.hypot(
+            touch2.clientX - touch1.clientX,
+            touch2.clientY - touch1.clientY
+        );
+        
+        const scaleChange = distance / touchState.lastDistance;
+        const newScale = Math.max(
+            zoomState.minScale,
+            Math.min(zoomState.maxScale, touchState.initialScale * scaleChange)
+        );
+        
+        // Zoom towards center of two touches
+        const rect = viewport.getBoundingClientRect();
+        const centerX = (touch1.clientX + touch2.clientX) / 2 - rect.left;
+        const centerY = (touch1.clientY + touch2.clientY) / 2 - rect.top;
+        
+        const gameX = (centerX - touchState.initialTranslateX) / touchState.initialScale;
+        const gameY = (centerY - touchState.initialTranslateY) / touchState.initialScale;
+        
+        zoomState.scale = newScale;
+        panState.translateX = centerX - gameX * zoomState.scale;
+        panState.translateY = centerY - gameY * zoomState.scale;
+        
+        updateTransform();
+    }
+    e.preventDefault();
+}
+
+function handleTouchEnd(e) {
+    touchState.isDragging = false;
+    viewport.classList.remove('dragging');
+}
+
+// Connect to server (for viewing game state)
+function connectToServer() {
     socket = io();
 
     socket.on('connect', () => {
         console.log('Connected to server');
-        // Send player info to server (only color, name will be generated on server)
-        socket.emit('playerInfo', {
-            playerColor: playerColor
-        });
     });
 
     socket.on('playerJoined', (data) => {
@@ -39,6 +221,15 @@ function connectToServer(playerColor) {
             mySquareId = null;
         }
     });
+}
+
+// Send player info to join the game
+function joinGame(playerColor) {
+    if (socket && socket.connected) {
+        socket.emit('playerInfo', {
+            playerColor: playerColor
+        });
+    }
 }
 
 function updateGameState(gameState) {
@@ -247,6 +438,11 @@ function updatePowerup(powerup, serverPowerup) {
     // Initialize login screen
     window.addEventListener('DOMContentLoaded', () => {
         gameArea = document.getElementById('gameArea');
+        initializePanZoom();
+        
+        // Connect to server immediately to receive game state updates
+        connectToServer();
+        
         const colorPicker = document.getElementById('colorPicker');
         const startButton = document.getElementById('startButton');
 
@@ -255,7 +451,7 @@ function updatePowerup(powerup, serverPowerup) {
             const playerColor = colorPicker.value;
             startButton.disabled = true;
             startButton.textContent = 'Connecting...';
-            connectToServer(playerColor);
+            joinGame(playerColor);
         }
 
         startButton.addEventListener('click', handleStartGame);
