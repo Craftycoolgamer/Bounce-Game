@@ -15,10 +15,30 @@
             width: 100vw;
             height: 100vh;
             overflow: hidden;
-            background-color: #1a1a1a;
+            background-color: #585858;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
-        [id^="square-"] {
+        #gameArea {
+            width: 1920px;
+            height: 1080px;
+            background-color: #1a1a1a;
+            position: relative;
+            overflow: hidden;
+            max-width: 100vw;
+            max-height: 100vh;
+            transform-origin: center;
+        }
+
+        @media (max-width: 1920px) or (max-height: 1080px) {
+            #gameArea {
+                transform: scale(min(calc(100vw / 1920), calc(100vh / 1080)));
+            }
+        }
+
+        #gameArea [id^="square-"] {
             position: absolute;
             width: 50px;
             height: 50px;
@@ -27,7 +47,7 @@
             border: 3px solid transparent;
         }
 
-        [id^="health-bar-"] {
+        #gameArea [id^="health-bar-"] {
             position: absolute;
             width: 50px;
             height: 4px;
@@ -35,14 +55,14 @@
             overflow: hidden;
         }
 
-        [id^="health-bar-fill-"] {
+        #gameArea [id^="health-bar-fill-"] {
             height: 100%;
             background-color: #4CAF50;
             transition: width 0.1s ease;
             width: 100%;
         }
 
-        [id^="nametag-"] {
+        #gameArea [id^="nametag-"] {
             position: absolute;
             color: white;
             font-size: 10px;
@@ -71,9 +91,112 @@
         .dying {
             animation: shrink 0.3s ease-out forwards;
         }
+
+        #gameArea [id^="powerup-"] {
+            position: absolute;
+        }
+
+        #loginScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        #loginScreen.hidden {
+            display: none;
+        }
+
+        #loginForm {
+            background-color: #2a2a2a;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            min-width: 400px;
+        }
+
+        #loginForm h1 {
+            color: white;
+            margin-bottom: 30px;
+            font-family: Arial, sans-serif;
+        }
+
+        #loginForm label {
+            display: block;
+            color: white;
+            margin-bottom: 10px;
+            font-family: Arial, sans-serif;
+            text-align: left;
+        }
+
+        #colorPicker {
+            height: 50px;
+            width: 100%;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background: none;
+            padding: 0;
+            margin-bottom: 2.5rem;
+        }
+
+        #colorPicker::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+
+        #colorPicker::-webkit-color-swatch {
+            border: none;
+            border-radius: 5px;
+        }
+
+        #colorPicker::-moz-color-swatch {
+            border: none;
+            border-radius: 5px;
+        }
+
+        #startButton {
+            width: 100%;
+            padding: 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        #startButton:hover {
+            background-color: #66BB6A;
+        }
+
+        #startButton:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
+    <div id="loginScreen">
+        <div id="loginForm">
+            <h1>Choose Your Color</h1>
+            <input type="color" id="colorPicker" value="#4CAF50" />
+            <button id="startButton">Start Game</button>
+        </div>
+    </div>
+    <div id="gameArea"></div>
+    <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
