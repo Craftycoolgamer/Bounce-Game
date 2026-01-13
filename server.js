@@ -21,6 +21,8 @@ const powerupDuration = 10000;
 const powerupSpawnChance = 1;
 const gameWidth = 1920; // Default game area width
 const gameHeight = 1080; // Default game area height
+const restitution = 0.8; // Bounciness coefficient (0 = no bounce, 1 = perfect bounce)
+const separationBias = 0.01; // Small bias to prevent jitter in position correction
 
 // Default player square type (all players have the same stats)
 const defaultPlayerType = { name: 'Player', color: '#4CAF50', health: 100, damage: 10 };
@@ -86,11 +88,71 @@ function createSquare(startX, startY, startDx, startDy, playerId = null, playerN
     return square;
 }
 
+// Static AABB collision check (for already overlapping objects)
 function checkCollision(square1, square2) {
     return square1.x < square2.x + squareSize &&
            square1.x + squareSize > square2.x &&
            square1.y < square2.y + squareSize &&
            square1.y + squareSize > square2.y;
+}
+
+// Swept AABB collision detection - prevents tunneling by checking movement path
+function checkSweptCollision(square1, square2, deltaTime) {
+    // Calculate relative velocity
+    const relativeVx = square1.dx - square2.dx;
+    const relativeVy = square1.dy - square2.dy;
+    
+    // If not moving relative to each other, use static collision check
+    if (Math.abs(relativeVx) < 0.001 && Math.abs(relativeVy) < 0.001) {
+        return checkCollision(square1, square2) ? { collided: true, t: 0 } : { collided: false };
+    }
+    
+    // Expand square2 by square1's size (Minkowski sum)
+    const expandedMinX = square2.x - squareSize;
+    const expandedMaxX = square2.x + squareSize;
+    const expandedMinY = square2.y - squareSize;
+    const expandedMaxY = square2.y + squareSize;
+    
+    // Calculate time of collision for each axis
+    let tEntryX, tExitX, tEntryY, tExitY;
+    
+    if (relativeVx > 0) {
+        tEntryX = (expandedMinX - square1.x) / relativeVx;
+        tExitX = (expandedMaxX - square1.x) / relativeVx;
+    } else if (relativeVx < 0) {
+        tEntryX = (expandedMaxX - square1.x) / relativeVx;
+        tExitX = (expandedMinX - square1.x) / relativeVx;
+    } else {
+        tEntryX = -Infinity;
+        tExitX = Infinity;
+    }
+    
+    if (relativeVy > 0) {
+        tEntryY = (expandedMinY - square1.y) / relativeVy;
+        tExitY = (expandedMaxY - square1.y) / relativeVy;
+    } else if (relativeVy < 0) {
+        tEntryY = (expandedMaxY - square1.y) / relativeVy;
+        tExitY = (expandedMinY - square1.y) / relativeVy;
+    } else {
+        tEntryY = -Infinity;
+        tExitY = Infinity;
+    }
+    
+    // Find the latest entry and earliest exit
+    const tEntry = Math.max(tEntryX, tEntryY);
+    const tExit = Math.min(tExitX, tExitY);
+    
+    // Check if collision occurs
+    if (tEntry < tExit && tEntry >= 0 && tEntry <= 1) {
+        return { collided: true, t: tEntry };
+    }
+    
+    // Also check static collision (in case they're already overlapping)
+    if (checkCollision(square1, square2)) {
+        return { collided: true, t: 0 };
+    }
+    
+    return { collided: false };
 }
 
 function createPowerup(x, y, specificType = null) {
@@ -283,7 +345,8 @@ function handleCollision(square1, square2) {
     let dy = center1Y - center2Y;
     let distance = Math.sqrt(dx * dx + dy * dy);
 
-    if (distance === 0) {
+    // Handle edge case where squares are exactly on top of each other
+    if (distance < 0.001) {
         dx = Math.random() - 0.5;
         dy = Math.random() - 0.5;
         distance = Math.sqrt(dx * dx + dy * dy);
@@ -292,41 +355,41 @@ function handleCollision(square1, square2) {
     const normalX = dx / distance;
     const normalY = dy / distance;
 
-    // Separate squares
+    // Separate squares to prevent overlap (more robust separation)
     const minDistance = squareSize;
     if (distance < minDistance) {
         const overlap = minDistance - distance;
-        const separationAmount = overlap / 2;
+        // Use a small bias to prevent jitter
+        const separationAmount = (overlap + separationBias) / 2;
+        
+        // Move squares apart along the normal
         square1.x += normalX * separationAmount;
         square1.y += normalY * separationAmount;
         square2.x -= normalX * separationAmount;
         square2.y -= normalY * separationAmount;
     }
 
-    // Calculate relative velocity
+    // Physics constants
+    const mass1 = 1.0; // All squares have same mass for now
+    const mass2 = 1.0;
+
+    // Calculate relative velocity along collision normal
     const relativeVx = square1.dx - square2.dx;
     const relativeVy = square1.dy - square2.dy;
     const relativeSpeed = relativeVx * normalX + relativeVy * normalY;
 
+    // Only resolve if objects are moving towards each other
     if (relativeSpeed < 0) {
-        const impulse = 2 * relativeSpeed;
-        square1.dx -= impulse * normalX;
-        square1.dy -= impulse * normalY;
-        square2.dx += impulse * normalX;
-        square2.dy += impulse * normalY;
-
-        const minVelocity = 1;
-        const speed1 = Math.sqrt(square1.dx * square1.dx + square1.dy * square1.dy);
-        const speed2 = Math.sqrt(square2.dx * square2.dx + square2.dy * square2.dy);
-
-        if (speed1 < minVelocity && speed1 > 0) {
-            square1.dx = (square1.dx / speed1) * minVelocity;
-            square1.dy = (square1.dy / speed1) * minVelocity;
-        }
-        if (speed2 < minVelocity && speed2 > 0) {
-            square2.dx = (square2.dx / speed2) * minVelocity;
-            square2.dy = (square2.dy / speed2) * minVelocity;
-        }
+        // Calculate impulse using conservation of momentum
+        // J = -(1 + e) * v_rel / (1/m1 + 1/m2)
+        // where e is restitution coefficient
+        const impulse = -(1 + restitution) * relativeSpeed / (1/mass1 + 1/mass2);
+        
+        // Apply impulse to velocities
+        square1.dx += (impulse * normalX) / mass1;
+        square1.dy += (impulse * normalY) / mass1;
+        square2.dx -= (impulse * normalX) / mass2;
+        square2.dy -= (impulse * normalY) / mass2;
     }
 
     clampVelocity(square1);
@@ -374,6 +437,29 @@ function animateSquare(square, deltaTime) {
     }
 }
 
+// Spatial partitioning grid for collision optimization
+function buildSpatialGrid() {
+    const cellSize = 100; // Adjust based on square size and expected density
+    const gridWidth = Math.ceil(gameWidth / cellSize);
+    const gridHeight = Math.ceil(gameHeight / cellSize);
+    
+    // Create grid
+    const grid = Array(gridHeight).fill(null).map(() => 
+        Array(gridWidth).fill(null).map(() => [])
+    );
+    
+    // Assign squares to grid cells
+    squares.forEach(square => {
+        const cellX = Math.floor(square.x / cellSize);
+        const cellY = Math.floor(square.y / cellSize);
+        const clampedX = Math.max(0, Math.min(cellX, gridWidth - 1));
+        const clampedY = Math.max(0, Math.min(cellY, gridHeight - 1));
+        grid[clampedY][clampedX].push(square);
+    });
+    
+    return { grid, gridWidth, gridHeight };
+}
+
 function gameLoop() {
     const currentTime = Date.now();
     const deltaTime = currentTime - lastTime;
@@ -387,19 +473,105 @@ function gameLoop() {
         }
     });
 
-    // Check collisions
-    const squaresForCollision = [...squares];
-    for (let i = 0; i < squaresForCollision.length; i++) {
-        for (let j = i + 1; j < squaresForCollision.length; j++) {
-            const square1 = squaresForCollision[i];
-            const square2 = squaresForCollision[j];
-            if (squares.includes(square1) && squares.includes(square2)) {
-                if (checkCollision(square1, square2)) {
-                    handleCollision(square1, square2);
+    // Build spatial grid for optimized collision detection
+    const { grid, gridWidth, gridHeight } = buildSpatialGrid();
+    const collisionPairs = [];
+    const processedPairs = new Set();
+    
+    // Check collisions using spatial grid
+    for (let y = 0; y < gridHeight; y++) {
+        for (let x = 0; x < gridWidth; x++) {
+            const cell = grid[y][x];
+            
+            // Check collisions within cell
+            for (let i = 0; i < cell.length; i++) {
+                for (let j = i + 1; j < cell.length; j++) {
+                    const square1 = cell[i];
+                    const square2 = cell[j];
+                    const pairKey = square1.id < square2.id 
+                        ? `${square1.id}-${square2.id}` 
+                        : `${square2.id}-${square1.id}`;
+                    
+                    if (!processedPairs.has(pairKey) && squares.includes(square1) && squares.includes(square2)) {
+                        processedPairs.add(pairKey);
+                        const collision = checkSweptCollision(square1, square2, deltaTime);
+                        
+                        if (collision.collided) {
+                            // If collision occurs in the future, resolve it at the time of impact
+                            if (collision.t > 0 && collision.t < 1) {
+                                // Move squares to collision point
+                                const oldX1 = square1.x;
+                                const oldY1 = square1.y;
+                                const oldX2 = square2.x;
+                                const oldY2 = square2.y;
+                                
+                                square1.x = oldX1 + square1.dx * collision.t;
+                                square1.y = oldY1 + square1.dy * collision.t;
+                                square2.x = oldX2 + square2.dx * collision.t;
+                                square2.y = oldY2 + square2.dy * collision.t;
+                            }
+                            
+                            collisionPairs.push({ square1, square2 });
+                        }
+                    }
+                }
+            }
+            
+            // Check collisions with adjacent cells (right, down, down-right, down-left)
+            // Only check 4 directions to avoid duplicate checks
+            const adjacentOffsets = [
+                [1, 0],   // right
+                [0, 1],   // down
+                [1, 1],   // down-right
+                [-1, 1]   // down-left
+            ];
+            
+            for (const [dx, dy] of adjacentOffsets) {
+                const adjX = x + dx;
+                const adjY = y + dy;
+                
+                if (adjX >= 0 && adjX < gridWidth && adjY >= 0 && adjY < gridHeight) {
+                    const adjCell = grid[adjY][adjX];
+                    
+                    for (const square1 of cell) {
+                        for (const square2 of adjCell) {
+                            const pairKey = square1.id < square2.id 
+                                ? `${square1.id}-${square2.id}` 
+                                : `${square2.id}-${square1.id}`;
+                            
+                            if (!processedPairs.has(pairKey) && squares.includes(square1) && squares.includes(square2)) {
+                                processedPairs.add(pairKey);
+                                const collision = checkSweptCollision(square1, square2, deltaTime);
+                                
+                                if (collision.collided) {
+                                    if (collision.t > 0 && collision.t < 1) {
+                                        const oldX1 = square1.x;
+                                        const oldY1 = square1.y;
+                                        const oldX2 = square2.x;
+                                        const oldY2 = square2.y;
+                                        
+                                        square1.x = oldX1 + square1.dx * collision.t;
+                                        square1.y = oldY1 + square1.dy * collision.t;
+                                        square2.x = oldX2 + square2.dx * collision.t;
+                                        square2.y = oldY2 + square2.dy * collision.t;
+                                    }
+                                    
+                                    collisionPairs.push({ square1, square2 });
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
+    
+    // Resolve all collisions
+    collisionPairs.forEach(pair => {
+        if (squares.includes(pair.square1) && squares.includes(pair.square2)) {
+            handleCollision(pair.square1, pair.square2);
+        }
+    });
 
     // Check powerup collisions
     const squaresForPowerup = [...squares];
