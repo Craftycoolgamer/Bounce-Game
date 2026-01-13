@@ -1,0 +1,34 @@
+[
+    {
+        "name": "Health",
+        "icon": "+",
+        "color": "#4CAF50",
+        "effect": "heal",
+        "value": 50,
+        "permanent": true
+    },
+    {
+        "name": "Damage Boost",
+        "icon": "⚔",
+        "color": "#F44336",
+        "effect": "damage",
+        "value": 1.5,
+        "permanent": true
+    },
+    {
+        "name": "Speed Boost",
+        "icon": "⚡",
+        "color": "#FFEB3B",
+        "effect": "speed",
+        "value": 1.5,
+        "permanent": false
+    },
+    {
+        "name": "Shield",
+        "icon": "🛡",
+        "color": "#2196F3",
+        "effect": "shield",
+        "value": 0.5,
+        "permanent": true
+    }
+]

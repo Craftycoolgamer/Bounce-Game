@@ -1,0 +1,8 @@
+{
+    "player": {
+        "name": "Player",
+        "health": 100,
+        "damage": 10,
+        "speed": 3
+    }
+}
