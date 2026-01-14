@@ -1,8 +1,8 @@
 module.exports = {
     // Game world
     world: {
-        width: 1920,
-        height: 1080
+        width: 854,
+        height: 480
     },
     
     // Square properties
@@ -16,8 +16,8 @@ module.exports = {
     
     // Physics
     physics: {
-        maxVelocity: 10,
-        normalSpeed: 3,
+        maxVelocity: 20,
+        normalSpeed: 10,
         frictionTime: 1000,
         restitution: 0.8,
         separationBias: 0.01
@@ -38,6 +38,6 @@ module.exports = {
     
     // Game loop
     gameLoop: {
-        fps: 60
+        fps: 120
     }
 };

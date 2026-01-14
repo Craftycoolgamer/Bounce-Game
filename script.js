@@ -28,6 +28,27 @@ window.addEventListener('DOMContentLoaded', () => {
     
     network.on('onGameConfig', (config) => {
         console.log('Game config received from server');
+        
+        // Set CSS custom properties from server config (server is single source of truth)
+        const gameArea = document.getElementById('gameArea');
+        if (gameArea && config) {
+            // World dimensions
+            if (config.world) {
+                gameArea.style.setProperty('--server-width', config.world.width + 'px');
+                gameArea.style.setProperty('--server-height', config.world.height + 'px');
+            }
+            
+            // Square size
+            if (config.square && config.square.size) {
+                gameArea.style.setProperty('--server-square-size', config.square.size + 'px');
+            }
+            
+            // Powerup size
+            if (config.powerup && config.powerup.size) {
+                gameArea.style.setProperty('--server-powerup-size', config.powerup.size + 'px');
+            }
+        }
+        
         // Re-initialize camera with correct world dimensions
         if (camera) {
             camera.reinitializeWithConfig();

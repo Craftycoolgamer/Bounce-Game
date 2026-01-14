@@ -111,6 +111,12 @@ class CollisionSystem {
                     for (let j = i + 1; j < cell.length; j++) {
                         const square1 = cell[i];
                         const square2 = cell[j];
+                        
+                        // Skip if both are spawners (they don't collide with each other)
+                        if (square1.isSpawner && square2.isSpawner) {
+                            continue;
+                        }
+                        
                         const pairKey = square1.id < square2.id 
                             ? `${square1.id}-${square2.id}` 
                             : `${square2.id}-${square1.id}`;
@@ -121,16 +127,21 @@ class CollisionSystem {
                             
                             if (collision.collided) {
                                 // If collision occurs in the future, resolve it at the time of impact
+                                // Only move non-spawner squares
                                 if (collision.t > 0 && collision.t < 1) {
                                     const oldX1 = square1.x;
                                     const oldY1 = square1.y;
                                     const oldX2 = square2.x;
                                     const oldY2 = square2.y;
                                     
-                                    square1.x = oldX1 + square1.dx * collision.t;
-                                    square1.y = oldY1 + square1.dy * collision.t;
-                                    square2.x = oldX2 + square2.dx * collision.t;
-                                    square2.y = oldY2 + square2.dy * collision.t;
+                                    if (!square1.isSpawner) {
+                                        square1.x = oldX1 + square1.dx * collision.t;
+                                        square1.y = oldY1 + square1.dy * collision.t;
+                                    }
+                                    if (!square2.isSpawner) {
+                                        square2.x = oldX2 + square2.dx * collision.t;
+                                        square2.y = oldY2 + square2.dy * collision.t;
+                                    }
                                 }
                                 
                                 collisionPairs.push({ square1, square2 });
@@ -156,6 +167,11 @@ class CollisionSystem {
                         
                         for (const square1 of cell) {
                             for (const square2 of adjCell) {
+                                // Skip if both are spawners
+                                if (square1.isSpawner && square2.isSpawner) {
+                                    continue;
+                                }
+                                
                                 const pairKey = square1.id < square2.id 
                                     ? `${square1.id}-${square2.id}` 
                                     : `${square2.id}-${square1.id}`;
@@ -165,16 +181,21 @@ class CollisionSystem {
                                     const collision = this.checkSweptCollision(square1, square2, deltaTime);
                                     
                                     if (collision.collided) {
+                                        // Only move non-spawner squares
                                         if (collision.t > 0 && collision.t < 1) {
                                             const oldX1 = square1.x;
                                             const oldY1 = square1.y;
                                             const oldX2 = square2.x;
                                             const oldY2 = square2.y;
                                             
-                                            square1.x = oldX1 + square1.dx * collision.t;
-                                            square1.y = oldY1 + square1.dy * collision.t;
-                                            square2.x = oldX2 + square2.dx * collision.t;
-                                            square2.y = oldY2 + square2.dy * collision.t;
+                                            if (!square1.isSpawner) {
+                                                square1.x = oldX1 + square1.dx * collision.t;
+                                                square1.y = oldY1 + square1.dy * collision.t;
+                                            }
+                                            if (!square2.isSpawner) {
+                                                square2.x = oldX2 + square2.dx * collision.t;
+                                                square2.y = oldY2 + square2.dy * collision.t;
+                                            }
                                         }
                                         
                                         collisionPairs.push({ square1, square2 });

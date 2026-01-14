@@ -4,5 +4,13 @@
         "health": 100,
         "damage": 10,
         "speed": 3
+    },
+    "powerupSpawner": {
+        "name": "Powerup Spawner",
+        "health": 999999,
+        "damage": 0,
+        "speed": 0,
+        "invisible": false,
+        "isSpawner": true
     }
 }

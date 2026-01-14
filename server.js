@@ -27,6 +27,7 @@ app.use(express.static(__dirname));
 let squares = [];
 let players = new Map(); // socketId -> { playerId, playerName, squareId, socketId }
 let lastTime = Date.now();
+let activeSpawnerCollisions = new Set(); // Track active square-spawner collisions
 
 // Initialize systems
 const gameEvents = new EventEmitter();
@@ -78,7 +79,37 @@ function createSquare(startX, startY, startDx, startDy, playerId = null, playerN
     return square;
 }
 
+function createSpawnerSquare(x, y) {
+    const squareId = squareIdGenerator.next();
+    const squareTypeConfig = squareTypes.powerupSpawner;
+    
+    const squareType = {
+        name: squareTypeConfig.name,
+        color: '#000000',
+        health: squareTypeConfig.health,
+        damage: squareTypeConfig.damage,
+        invisible: squareTypeConfig.invisible,
+        isSpawner: squareTypeConfig.isSpawner
+    };
+    
+    const square = new Square(squareId, x, y, 0, 0, {
+        health: squareType.health,
+        damage: squareType.damage,
+        type: squareType,
+        playerId: null,
+        playerName: null
+    });
+    
+    squares.push(square);
+    return square;
+}
+
 function removeSquare(square) {
+    // Don't remove spawner squares
+    if (square.isSpawner) {
+        return;
+    }
+    
     // Drop powerups from square
     powerupSystem.dropPowerupsFromSquare(square);
 
@@ -97,10 +128,10 @@ function gameLoop() {
     const deltaTime = currentTime - lastTime;
     lastTime = currentTime;
 
-    // Animate squares
+    // Animate squares (skip spawner squares)
     const squaresCopy = [...squares];
     squaresCopy.forEach(square => {
-        if (squares.includes(square)) {
+        if (squares.includes(square) && !square.isSpawner) {
             physicsSystem.animateSquare(square, deltaTime);
         }
     });
@@ -108,19 +139,55 @@ function gameLoop() {
     // Detect collisions
     const collisionPairs = collisionSystem.detectCollisions(squares, deltaTime);
     
+    // Track which collisions are happening this frame
+    const currentFrameCollisions = new Set();
+    
     // Resolve all collisions
     collisionPairs.forEach(pair => {
         if (squares.includes(pair.square1) && squares.includes(pair.square2)) {
-            const result = physicsSystem.handleCollision(pair.square1, pair.square2);
-            
-            if (result.died1) {
-                removeSquare(pair.square1);
-            }
-            if (result.died2) {
-                removeSquare(pair.square2);
+            // Check if either square is a spawner
+            if (pair.square1.isSpawner || pair.square2.isSpawner) {
+                // Handle spawner collision
+                const spawnerSquare = pair.square1.isSpawner ? pair.square1 : pair.square2;
+                const hittingSquare = pair.square1.isSpawner ? pair.square2 : pair.square1;
+                
+                // Only spawn if hitting square is not a spawner
+                if (!hittingSquare.isSpawner) {
+                    // Create a unique key for this square-spawner pair
+                    const collisionKey = `${hittingSquare.id}-${spawnerSquare.id}`;
+                    currentFrameCollisions.add(collisionKey);
+                    
+                    // Only spawn if this is a new collision (wasn't colliding before)
+                    if (!activeSpawnerCollisions.has(collisionKey)) {
+                        activeSpawnerCollisions.add(collisionKey);
+                        const randomX = Math.random() * (GameConfig.world.width - GameConfig.powerup.size);
+                        const randomY = Math.random() * (GameConfig.world.height - GameConfig.powerup.size);
+                        powerupSystem.create(randomX, randomY);
+                    }
+                }
+            } else {
+                // Normal collision resolution
+                const result = physicsSystem.handleCollision(pair.square1, pair.square2);
+                
+                if (result.died1) {
+                    removeSquare(pair.square1);
+                }
+                if (result.died2) {
+                    removeSquare(pair.square2);
+                }
             }
         }
     });
+    
+    // Remove collisions that are no longer active (square moved away from spawner)
+    // Only keep collisions that are still happening this frame
+    const collisionsToRemove = [];
+    activeSpawnerCollisions.forEach(collisionKey => {
+        if (!currentFrameCollisions.has(collisionKey)) {
+            collisionsToRemove.push(collisionKey);
+        }
+    });
+    collisionsToRemove.forEach(key => activeSpawnerCollisions.delete(key));
 
     // Check powerup collisions
     const squaresForPowerup = [...squares];
@@ -150,12 +217,40 @@ function gameLoop() {
 io.on('connection', (socket) => {
     console.log('Player connected:', socket.id);
 
-    // Send game config to client (single source of truth)
+    // Send complete game config to client (single source of truth)
     socket.emit('gameConfig', {
-        squareSize: GameConfig.square.size,
-        powerupSize: GameConfig.powerup.size,
-        worldWidth: GameConfig.world.width,
-        worldHeight: GameConfig.world.height
+        square: {
+            size: GameConfig.square.size,
+            maxCount: GameConfig.square.maxCount,
+            defaultHealth: GameConfig.square.defaultHealth,
+            defaultDamage: GameConfig.square.defaultDamage,
+            defaultColor: GameConfig.square.defaultColor
+        },
+        powerup: {
+            size: GameConfig.powerup.size,
+            duration: GameConfig.powerup.duration,
+            spawnChance: GameConfig.powerup.spawnChance,
+            dropOffsetDistance: GameConfig.powerup.dropOffsetDistance
+        },
+        world: {
+            width: GameConfig.world.width,
+            height: GameConfig.world.height
+        },
+        physics: {
+            maxVelocity: GameConfig.physics.maxVelocity,
+            normalSpeed: GameConfig.physics.normalSpeed,
+            frictionTime: GameConfig.physics.frictionTime,
+            restitution: GameConfig.physics.restitution,
+            separationBias: GameConfig.physics.separationBias
+        },
+        spatialGrid: {
+            cellSize: GameConfig.spatialGrid.cellSize
+        },
+        gameLoop: {
+            fps: GameConfig.gameLoop.fps
+        },
+        squareTypes: squareTypes,
+        powerupTypes: powerupTypes
     });
 
     // Generate player ID
@@ -206,9 +301,24 @@ io.on('connection', (socket) => {
     });
 });
 
+// Initialize spawner squares
+function initializeSpawnerSquares() {
+    const spawnerCount = 3; // Adjust as needed
+    const margin = GameConfig.square.size;
+    
+    for (let i = 0; i < spawnerCount; i++) {
+        const x = margin + Math.random() * (GameConfig.world.width - 2 * margin - GameConfig.square.size);
+        const y = margin + Math.random() * (GameConfig.world.height - 2 * margin - GameConfig.square.size);
+        createSpawnerSquare(x, y);
+    }
+}
+
 // Start game loop
 const fps = GameConfig.gameLoop.fps;
 setInterval(gameLoop, 1000 / fps);
+
+// Initialize spawner squares
+initializeSpawnerSquares();
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

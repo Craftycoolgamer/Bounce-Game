@@ -13,8 +13,8 @@ export class Renderer {
         // Get from server config (single source of truth)
         if (this.network) {
             const config = this.network.getGameConfig();
-            if (config && typeof config.squareSize === 'number') {
-                return config.squareSize;
+            if (config && config.square && typeof config.square.size === 'number') {
+                return config.square.size;
             }
         }
         // Fallback (shouldn't happen, but prevents errors)
@@ -25,8 +25,8 @@ export class Renderer {
         // Get from server config (single source of truth)
         if (this.network) {
             const config = this.network.getGameConfig();
-            if (config && typeof config.powerupSize === 'number') {
-                return config.powerupSize;
+            if (config && config.powerup && typeof config.powerup.size === 'number') {
+                return config.powerup.size;
             }
         }
         // Fallback (shouldn't happen, but prevents errors)
@@ -34,6 +34,11 @@ export class Renderer {
     }
     
     createSquare(serverSquare, myPlayerId) {
+        // Skip rendering invisible spawner squares
+        if (serverSquare.invisible) {
+            return;
+        }
+        
         const squareSize = this.getSquareSize();
         
         // Create square element
@@ -48,7 +53,7 @@ export class Renderer {
         squareElement.style.top = serverSquare.y + 'px';
         
         // Highlight player's own square
-        if (serverSquare.playerId === myPlayerId) {
+        if (serverSquare.playerId === myPlayerId && !serverSquare.isSpawner) {
             squareElement.style.boxShadow = '0 0 10px 3px rgba(255, 255, 255, 0.8)';
             squareElement.style.border = '3px solid white';
         } else {
@@ -58,23 +63,30 @@ export class Renderer {
         this.gameArea.appendChild(squareElement);
         
         // Create nametag
-        const nametagElement = document.createElement('div');
-        nametagElement.id = `nametag-${serverSquare.id}`;
-        nametagElement.textContent = serverSquare.playerName || serverSquare.name;
-        nametagElement.style.left = (serverSquare.x + squareSize / 2) + 'px';
-        nametagElement.style.top = (serverSquare.y + GameConfig.rendering.nametagOffset) + 'px';
-        this.gameArea.appendChild(nametagElement);
+        let nametagElement = null;
+        if (!serverSquare.isSpawner) {
+            nametagElement = document.createElement('div');
+            nametagElement.id = `nametag-${serverSquare.id}`;
+            nametagElement.textContent = serverSquare.playerName || serverSquare.name;
+            nametagElement.style.left = (serverSquare.x + squareSize / 2) + 'px';
+            nametagElement.style.top = (serverSquare.y + GameConfig.rendering.nametagOffset) + 'px';
+            this.gameArea.appendChild(nametagElement);
+        }
         
         // Create health bar
-        const healthBarElement = document.createElement('div');
-        healthBarElement.id = `health-bar-${serverSquare.id}`;
-        healthBarElement.style.left = serverSquare.x + 'px';
-        healthBarElement.style.top = (serverSquare.y + squareSize + GameConfig.rendering.healthBarOffset) + 'px';
-        this.gameArea.appendChild(healthBarElement);
-        
-        const healthBarFill = document.createElement('div');
-        healthBarFill.id = `health-bar-fill-${serverSquare.id}`;
-        healthBarElement.appendChild(healthBarFill);
+        let healthBarElement = null;
+        let healthBarFill = null;
+        if (!serverSquare.isSpawner) {
+            healthBarElement = document.createElement('div');
+            healthBarElement.id = `health-bar-${serverSquare.id}`;
+            healthBarElement.style.left = serverSquare.x + 'px';
+            healthBarElement.style.top = (serverSquare.y + squareSize + GameConfig.rendering.healthBarOffset) + 'px';
+            this.gameArea.appendChild(healthBarElement);
+            
+            healthBarFill = document.createElement('div');
+            healthBarFill.id = `health-bar-fill-${serverSquare.id}`;
+            healthBarElement.appendChild(healthBarFill);
+        }
         
         this.squareElements.set(serverSquare.id, {
             id: serverSquare.id,
@@ -87,6 +99,11 @@ export class Renderer {
     }
     
     updateSquare(squareId, serverSquare, myPlayerId) {
+        // Skip updating invisible spawner squares
+        if (serverSquare.invisible || serverSquare.isSpawner) {
+            return;
+        }
+        
         const square = this.squareElements.get(squareId);
         if (!square) return;
         
@@ -218,9 +235,14 @@ export class Renderer {
         }
         
         try {
-            // Update squares
+            // Update squares (filter out invisible spawners)
             if (gameState.squares && Array.isArray(gameState.squares)) {
                 gameState.squares.forEach(serverSquare => {
+                    // Skip invisible spawner squares
+                    if (serverSquare.invisible) {
+                        return;
+                    }
+                    
                     if (this.squareElements.has(serverSquare.id)) {
                         this.updateSquare(serverSquare.id, serverSquare, myPlayerId);
                     } else {
@@ -229,7 +251,11 @@ export class Renderer {
                 });
                 
                 // Remove squares that no longer exist
-                const existingSquareIds = new Set(gameState.squares.map(s => s.id));
+                const existingSquareIds = new Set(
+                    gameState.squares
+                        .filter(s => !s.invisible)
+                        .map(s => s.id)
+                );
                 for (const squareId of this.squareElements.keys()) {
                     if (!existingSquareIds.has(squareId)) {
                         this.removeSquare(squareId);

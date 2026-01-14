@@ -15,6 +15,8 @@ class Square {
         this.powerups = {};
         this.playerId = config.playerId || null;
         this.playerName = config.playerName || null;
+        this.isSpawner = config.type?.isSpawner || false;
+        this.invisible = config.type?.invisible || false;
     }
     
     getEffectiveSpeed() {
@@ -23,6 +25,10 @@ class Square {
     }
     
     takeDamage(amount) {
+        // Spawner squares don't take damage
+        if (this.isSpawner) {
+            return false;
+        }
         this.health -= amount;
         return this.health <= 0;
     }
@@ -32,6 +38,10 @@ class Square {
     }
     
     getEffectiveDamage() {
+        // Spawner squares don't deal damage
+        if (this.isSpawner) {
+            return 0;
+        }
         const damageBoost = (this.powerups && this.powerups.damageBoost) ? this.powerups.damageBoost : 1;
         return Math.floor(this.baseDamage * damageBoost);
     }
@@ -48,7 +58,9 @@ class Square {
             damage: this.getEffectiveDamage(),
             x: this.x,
             y: this.y,
-            powerups: this.powerups || {}
+            powerups: this.powerups || {},
+            isSpawner: this.isSpawner,
+            invisible: this.invisible
         };
     }
 }

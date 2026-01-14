@@ -37,12 +37,9 @@ export class Camera {
         if (!this.viewport) return;
         
         // Get world dimensions from server config (single source of truth)
-        const worldWidth = this.network && this.network.getGameConfig() 
-            ? this.network.getGameConfig().worldWidth 
-            : 1920; // Fallback
-        const worldHeight = this.network && this.network.getGameConfig() 
-            ? this.network.getGameConfig().worldHeight 
-            : 1080; // Fallback
+        const config = this.network && this.network.getGameConfig();
+        const worldWidth = config && config.world ? config.world.width : 1920; // Fallback
+        const worldHeight = config && config.world ? config.world.height : 1080; // Fallback
         
         // Calculate initial scale to fit viewport
         const initialScale = Math.min(
@@ -65,8 +62,8 @@ export class Camera {
         if (!this.viewport || !this.network || !this.network.getGameConfig()) return;
         
         const config = this.network.getGameConfig();
-        const worldWidth = config.worldWidth;
-        const worldHeight = config.worldHeight;
+        const worldWidth = config && config.world ? config.world.width : 1920;
+        const worldHeight = config && config.world ? config.world.height : 1080;
         
         // Calculate initial scale to fit viewport
         const initialScale = Math.min(
