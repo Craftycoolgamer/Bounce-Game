@@ -207,6 +207,15 @@ io.on('connection', (socket) => {
     // Generate player ID
     const playerId = playerIdGenerator.next();
 
+    // ============================================
+    // CONNECTION STATS - Ping handler
+    // Comment out this block to disable ping/pong
+    // ============================================
+    socket.on('ping', (timestamp) => {
+        socket.emit('pong', timestamp);
+    });
+    // ============================================
+
     // Wait for player info before creating square
     socket.on('playerInfo', (data) => {
         const playerName = `Player ${playerId}`;

@@ -195,6 +195,33 @@
             background-color: #555;
             cursor: not-allowed;
         }
+
+        /* ============================================
+           CONNECTION STATS DISPLAY - TOGGLE ON/OFF
+           Comment out the entire #connectionStats block to disable
+           ============================================ */
+        #connectionStats {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            z-index: 100;
+            min-width: 180px;
+        }
+
+        #connectionStats div {
+            margin: 4px 0;
+        }
+
+        #connectionStats span {
+            font-weight: bold;
+        }
+        /* ============================================ */
     </style>
 </head>
 <body>
@@ -208,6 +235,17 @@
     <div id="viewport">
         <div id="gameArea"></div>
     </div>
+    <!-- ============================================
+         CONNECTION STATS DISPLAY - TOGGLE ON/OFF
+         Comment out the entire #connectionStats div to disable
+         ============================================ -->
+    <div id="connectionStats">
+        <div>Status: <span id="connectionStatus">Disconnected</span></div>
+        <div>Socket ID: <span id="socketId">-</span></div>
+        <div>Ping: <span id="ping">-</span>ms</div>
+        <div>Player ID: <span id="playerId">-</span></div>
+    </div>
+    <!-- ============================================ -->
     <script src="/socket.io/socket.io.js"></script>
     <script type="module" src="script.js"></script>
 </body>
