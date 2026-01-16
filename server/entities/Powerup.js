@@ -1,18 +1,14 @@
-class Powerup {
-    constructor(id, x, y, type) {
-        this.id = id;
-        this.x = x;
-        this.y = y;
-        this.type = type;
-    }
+const Entity = require('./Entity');
+
+class Powerup extends Entity {
+    static size = 30;
+    static spawnChance = 1;
+    static dropOffsetDistance = 20;
     
-    toJSON() {
-        return {
-            id: this.id,
-            type: this.type,
-            x: this.x,
-            y: this.y
-        };
+    constructor(id, x, y, type) {
+        super(id, x, y);
+        this.type = type;
+        this.size = Powerup.size;
     }
 }
 

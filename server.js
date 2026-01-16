@@ -4,14 +4,15 @@ const { Server } = require('socket.io');
 const path = require('path');
 
 // Configuration
-const GameConfig = require('./server/config/gameConfig');
-const powerupTypes = require('./server/config/powerups.json');
-const squareTypes = require('./server/config/squareTypes.json');
+const Game = require('./server/Game');
+const PlayerSquare = require('./server/entities/PlayerSquare');
+const SpawnerSquare = require('./server/entities/SpawnerSquare');
+const Powerup = require('./server/entities/Powerup');
 
 // Systems
 const EventEmitter = require('./server/utils/EventEmitter');
 const IdGenerator = require('./server/utils/IdGenerator');
-const Square = require('./server/entities/Square');
+const SquareFactory = require('./server/entities/SquareFactory');
 const PhysicsSystem = require('./server/systems/PhysicsSystem');
 const CollisionSystem = require('./server/systems/CollisionSystem');
 const PowerupSystem = require('./server/systems/PowerupSystem');
@@ -23,6 +24,9 @@ const io = new Server(server);
 // Serve static files
 app.use(express.static(__dirname));
 
+// Initialize game config
+const gameConfig = new Game();
+
 // Game state
 let squares = [];
 let players = new Map(); // socketId -> { playerId, playerName, squareId, socketId }
@@ -33,9 +37,10 @@ let activeSpawnerCollisions = new Set(); // Track active square-spawner collisio
 const gameEvents = new EventEmitter();
 const playerIdGenerator = new IdGenerator(1);
 const squareIdGenerator = new IdGenerator(0);
-const physicsSystem = new PhysicsSystem();
-const collisionSystem = new CollisionSystem();
-const powerupSystem = new PowerupSystem(powerupTypes, gameEvents);
+const squareFactory = new SquareFactory();
+const physicsSystem = new PhysicsSystem(gameConfig);
+const collisionSystem = new CollisionSystem(gameConfig);
+const powerupSystem = new PowerupSystem(gameEvents);
 
 // Event listeners
 gameEvents.on('squareDied', (data) => {
@@ -49,30 +54,21 @@ gameEvents.on('squareDied', (data) => {
 });
 
 function createSquare(startX, startY, startDx, startDy, playerId = null, playerName = null, playerColor = null) {
-    if (squares.length >= GameConfig.square.maxCount) {
+    if (squares.length >= PlayerSquare.maxCount) {
         return null;
     }
 
     const squareId = squareIdGenerator.next();
-    
-    // Get square type config
-    const squareTypeConfig = squareTypes.player;
-    
-    // Create type with player's chosen color or default
-    const squareType = {
-        name: squareTypeConfig.name,
-        color: playerColor || GameConfig.square.defaultColor,
-        health: squareTypeConfig.health,
-        damage: squareTypeConfig.damage
-    };
-    
-    const square = new Square(squareId, startX, startY, startDx, startDy, {
-        health: squareType.health,
-        damage: squareType.damage,
-        type: squareType,
-        playerId: playerId,
-        playerName: playerName || squareType.name
-    });
+    const square = squareFactory.createPlayerSquare(
+        squareId, 
+        startX, 
+        startY, 
+        startDx, 
+        startDy, 
+        playerId, 
+        playerName, 
+        playerColor || PlayerSquare.defaultColor
+    );
 
     physicsSystem.clampVelocity(square);
     squares.push(square);
@@ -81,37 +77,21 @@ function createSquare(startX, startY, startDx, startDy, playerId = null, playerN
 
 function createSpawnerSquare(x, y) {
     const squareId = squareIdGenerator.next();
-    const squareTypeConfig = squareTypes.powerupSpawner;
-    
-    const squareType = {
-        name: squareTypeConfig.name,
-        color: '#000000',
-        health: squareTypeConfig.health,
-        damage: squareTypeConfig.damage,
-        invisible: squareTypeConfig.invisible,
-        isSpawner: squareTypeConfig.isSpawner
-    };
-    
-    const square = new Square(squareId, x, y, 0, 0, {
-        health: squareType.health,
-        damage: squareType.damage,
-        type: squareType,
-        playerId: null,
-        playerName: null
-    });
-    
+    const square = squareFactory.createSpawnerSquare(squareId, x, y);
     squares.push(square);
     return square;
 }
 
-function removeSquare(square) {
+function removeSquare(square, dropPowerups = true) {
     // Don't remove spawner squares
     if (square.isSpawner) {
         return;
     }
     
-    // Drop powerups from square
-    powerupSystem.dropPowerupsFromSquare(square);
+    // Drop powerups from square only if specified
+    if (dropPowerups) {
+        powerupSystem.dropPowerupsFromSquare(square);
+    }
 
     // Remove from squares array
     const index = squares.indexOf(square);
@@ -160,8 +140,8 @@ function gameLoop() {
                     // Only spawn if this is a new collision (wasn't colliding before)
                     if (!activeSpawnerCollisions.has(collisionKey)) {
                         activeSpawnerCollisions.add(collisionKey);
-                        const randomX = Math.random() * (GameConfig.world.width - GameConfig.powerup.size);
-                        const randomY = Math.random() * (GameConfig.world.height - GameConfig.powerup.size);
+                        const randomX = Math.random() * (gameConfig.world.width - Powerup.size);
+                        const randomY = Math.random() * (gameConfig.world.height - Powerup.size);
                         powerupSystem.create(randomX, randomY);
                     }
                 }
@@ -219,38 +199,9 @@ io.on('connection', (socket) => {
 
     // Send complete game config to client (single source of truth)
     socket.emit('gameConfig', {
-        square: {
-            size: GameConfig.square.size,
-            maxCount: GameConfig.square.maxCount,
-            defaultHealth: GameConfig.square.defaultHealth,
-            defaultDamage: GameConfig.square.defaultDamage,
-            defaultColor: GameConfig.square.defaultColor
-        },
-        powerup: {
-            size: GameConfig.powerup.size,
-            duration: GameConfig.powerup.duration,
-            spawnChance: GameConfig.powerup.spawnChance,
-            dropOffsetDistance: GameConfig.powerup.dropOffsetDistance
-        },
-        world: {
-            width: GameConfig.world.width,
-            height: GameConfig.world.height
-        },
-        physics: {
-            maxVelocity: GameConfig.physics.maxVelocity,
-            normalSpeed: GameConfig.physics.normalSpeed,
-            frictionTime: GameConfig.physics.frictionTime,
-            restitution: GameConfig.physics.restitution,
-            separationBias: GameConfig.physics.separationBias
-        },
-        spatialGrid: {
-            cellSize: GameConfig.spatialGrid.cellSize
-        },
-        gameLoop: {
-            fps: GameConfig.gameLoop.fps
-        },
-        squareTypes: squareTypes,
-        powerupTypes: powerupTypes
+        world: gameConfig.world,
+        squareTypes: squareFactory.getSquareTypes(),
+        powerupTypes: powerupSystem.getPowerupTypes()
     });
 
     // Generate player ID
@@ -259,13 +210,14 @@ io.on('connection', (socket) => {
     // Wait for player info before creating square
     socket.on('playerInfo', (data) => {
         const playerName = `Player ${playerId}`;
-        const playerColor = data.playerColor || GameConfig.square.defaultColor;
+        const playerColor = data.playerColor || PlayerSquare.defaultColor;
 
         console.log('Player info received:', playerName, playerColor);
 
         // Create a square for this player
-        const centerX = (GameConfig.world.width - GameConfig.square.size) / 2;
-        const centerY = (GameConfig.world.height - GameConfig.square.size) / 2;
+        const squareSize = PlayerSquare.getDefaultConfig().size;
+        const centerX = (gameConfig.world.width - squareSize) / 2;
+        const centerY = (gameConfig.world.height - squareSize) / 2;
         const newDx = (Math.random() > 0.5 ? 1 : -1) * (Math.random() * 4 + 2);
         const newDy = (Math.random() > 0.5 ? 1 : -1) * (Math.random() * 4 + 2);
         const square = createSquare(centerX, centerY, newDx, newDy, playerId, playerName, playerColor);
@@ -291,10 +243,10 @@ io.on('connection', (socket) => {
         console.log('Player disconnected:', socket.id);
         const player = players.get(socket.id);
         if (player && player.squareId) {
-            // Find and remove player's square
+            // Find and remove player's square (don't drop powerups on disconnect)
             const playerSquare = squares.find(s => s.id === player.squareId);
             if (playerSquare) {
-                removeSquare(playerSquare);
+                removeSquare(playerSquare, false);
             }
         }
         players.delete(socket.id);
@@ -304,18 +256,18 @@ io.on('connection', (socket) => {
 // Initialize spawner squares
 function initializeSpawnerSquares() {
     const spawnerCount = 3; // Adjust as needed
-    const margin = GameConfig.square.size;
+    const squareSize = SpawnerSquare.getDefaultConfig().size;
+    const margin = squareSize;
     
     for (let i = 0; i < spawnerCount; i++) {
-        const x = margin + Math.random() * (GameConfig.world.width - 2 * margin - GameConfig.square.size);
-        const y = margin + Math.random() * (GameConfig.world.height - 2 * margin - GameConfig.square.size);
+        const x = margin + Math.random() * (gameConfig.world.width - 2 * margin - squareSize);
+        const y = margin + Math.random() * (gameConfig.world.height - 2 * margin - squareSize);
         createSpawnerSquare(x, y);
     }
 }
 
 // Start game loop
-const fps = GameConfig.gameLoop.fps;
-setInterval(gameLoop, 1000 / fps);
+setInterval(gameLoop, 1000 / Game.fps);
 
 // Initialize spawner squares
 initializeSpawnerSquares();

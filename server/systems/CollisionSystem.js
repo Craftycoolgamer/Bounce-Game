@@ -1,16 +1,19 @@
-const GameConfig = require('../config/gameConfig');
+const BaseSystem = require('./BaseSystem');
 
-class CollisionSystem {
-    constructor() {
-        this.squareSize = GameConfig.square.size;
+class CollisionSystem extends BaseSystem {
+    static cellSize = 100;
+    
+    constructor(game) {
+        super();
+        this.game = game;
     }
     
     // Static AABB collision check (for already overlapping objects)
     checkCollision(square1, square2) {
-        return square1.x < square2.x + this.squareSize &&
-               square1.x + this.squareSize > square2.x &&
-               square1.y < square2.y + this.squareSize &&
-               square1.y + this.squareSize > square2.y;
+        return square1.x < square2.x + square2.size &&
+               square1.x + square1.size > square2.x &&
+               square1.y < square2.y + square2.size &&
+               square1.y + square1.size > square2.y;
     }
     
     // Swept AABB collision detection - prevents tunneling by checking movement path
@@ -25,10 +28,10 @@ class CollisionSystem {
         }
         
         // Expand square2 by square1's size (Minkowski sum)
-        const expandedMinX = square2.x - this.squareSize;
-        const expandedMaxX = square2.x + this.squareSize;
-        const expandedMinY = square2.y - this.squareSize;
-        const expandedMaxY = square2.y + this.squareSize;
+        const expandedMinX = square2.x - square1.size;
+        const expandedMaxX = square2.x + square2.size;
+        const expandedMinY = square2.y - square1.size;
+        const expandedMaxY = square2.y + square2.size;
         
         // Calculate time of collision for each axis
         let tEntryX, tExitX, tEntryY, tExitY;
@@ -73,9 +76,9 @@ class CollisionSystem {
     }
     
     buildSpatialGrid(squares) {
-        const cellSize = GameConfig.spatialGrid.cellSize;
-        const gameWidth = GameConfig.world.width;
-        const gameHeight = GameConfig.world.height;
+        const cellSize = CollisionSystem.cellSize;
+        const gameWidth = this.game.world.width;
+        const gameHeight = this.game.world.height;
         const gridWidth = Math.ceil(gameWidth / cellSize);
         const gridHeight = Math.ceil(gameHeight / cellSize);
         

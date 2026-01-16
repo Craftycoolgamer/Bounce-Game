@@ -1,31 +1,30 @@
-const GameConfig = require('../config/gameConfig');
+const BaseSystem = require('./BaseSystem');
 
-class PhysicsSystem {
-    constructor() {
-        this.squareSize = GameConfig.square.size;
-        this.gameWidth = GameConfig.world.width;
-        this.gameHeight = GameConfig.world.height;
+class PhysicsSystem extends BaseSystem {
+    constructor(game) {
+        super();
+        this.game = game;
     }
     
     clampVelocity(square) {
         const speed = Math.sqrt(square.dx * square.dx + square.dy * square.dy);
-        if (speed > GameConfig.physics.maxVelocity) {
-            square.dx = (square.dx / speed) * GameConfig.physics.maxVelocity;
-            square.dy = (square.dy / speed) * GameConfig.physics.maxVelocity;
+        if (speed > square.maxVelocity) {
+            square.dx = (square.dx / speed) * square.maxVelocity;
+            square.dy = (square.dy / speed) * square.maxVelocity;
         }
     }
     
     animateSquare(square, deltaTime) {
-        const maxX = this.gameWidth - this.squareSize;
-        const maxY = this.gameHeight - this.squareSize;
+        const maxX = this.game.world.width - square.size;
+        const maxY = this.game.world.height - square.size;
         
         const speedMultiplier = (square.powerups && square.powerups.speedBoost) ? square.powerups.speedBoost : 1;
-        const effectiveNormalSpeed = GameConfig.physics.normalSpeed * speedMultiplier;
+        const effectiveNormalSpeed = square.normalSpeed * speedMultiplier;
         
         const currentSpeed = Math.sqrt(square.dx * square.dx + square.dy * square.dy);
         
         if (currentSpeed > effectiveNormalSpeed) {
-            const timeConstant = GameConfig.physics.frictionTime / 4.605;
+            const timeConstant = square.frictionTime / 4.605;
             const decayFactor = Math.exp(-deltaTime / timeConstant);
             const targetSpeed = effectiveNormalSpeed + (currentSpeed - effectiveNormalSpeed) * decayFactor;
             const finalSpeed = Math.max(effectiveNormalSpeed, targetSpeed);
@@ -81,10 +80,10 @@ class PhysicsSystem {
         }
         
         // Calculate center points
-        const center1X = square1.x + this.squareSize / 2;
-        const center1Y = square1.y + this.squareSize / 2;
-        const center2X = square2.x + this.squareSize / 2;
-        const center2Y = square2.y + this.squareSize / 2;
+        const center1X = square1.x + square1.size / 2;
+        const center1Y = square1.y + square1.size / 2;
+        const center2X = square2.x + square2.size / 2;
+        const center2Y = square2.y + square2.size / 2;
         
         // Calculate collision normal
         let dx = center1X - center2X;
@@ -102,10 +101,10 @@ class PhysicsSystem {
         const normalY = dy / distance;
         
         // Separate squares to prevent overlap
-        const minDistance = this.squareSize;
+        const minDistance = square1.size;
         if (distance < minDistance) {
             const overlap = minDistance - distance;
-            const separationAmount = (overlap + GameConfig.physics.separationBias) / 2;
+            const separationAmount = (overlap + square1.separationBias) / 2;
             
             square1.x += normalX * separationAmount;
             square1.y += normalY * separationAmount;
@@ -124,7 +123,7 @@ class PhysicsSystem {
         
         // Only resolve if objects are moving towards each other
         if (relativeSpeed < 0) {
-            const impulse = -(1 + GameConfig.physics.restitution) * relativeSpeed / (1/mass1 + 1/mass2);
+            const impulse = -(1 + square1.restitution) * relativeSpeed / (1/mass1 + 1/mass2);
             
             square1.dx += (impulse * normalX) / mass1;
             square1.dy += (impulse * normalY) / mass1;
