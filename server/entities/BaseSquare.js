@@ -18,7 +18,7 @@ class BaseSquare extends Entity {
     }
     
     getEffectiveSpeed() {
-        const speedBoost = (this.powerups && this.powerups.speedBoost) ? this.powerups.speedBoost : 1;
+        const speedBoost = (this.powerups && this.powerups.speed) ? this.powerups.speed : 1;
         return this.normalSpeed * speedBoost;
     }
     
@@ -28,7 +28,7 @@ class BaseSquare extends Entity {
     }
     
     getEffectiveDamage() {
-        const damageBoost = (this.powerups && this.powerups.damageBoost) ? this.powerups.damageBoost : 1;
+        const damageBoost = (this.powerups && this.powerups.damage) ? this.powerups.damage : 1;
         return Math.floor(this.baseDamage * damageBoost);
     }
     
@@ -38,7 +38,7 @@ class BaseSquare extends Entity {
         // Add square-specific properties
         json.playerId = this.playerId;
         json.playerName = this.playerName;
-        json.name = this.type.name;
+        json.name = this.name;
         json.maxHealth = this.maxHealth;
         json.health = this.health;
         json.damage = this.getEffectiveDamage();

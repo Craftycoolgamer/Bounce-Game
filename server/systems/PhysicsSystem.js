@@ -18,7 +18,7 @@ class PhysicsSystem extends BaseSystem {
         const maxX = this.game.world.width - square.size;
         const maxY = this.game.world.height - square.size;
         
-        const speedMultiplier = (square.powerups && square.powerups.speedBoost) ? square.powerups.speedBoost : 1;
+        const speedMultiplier = (square.powerups && square.powerups.speed) ? square.powerups.speed : 1;
         const effectiveNormalSpeed = square.normalSpeed * speedMultiplier;
         
         const currentSpeed = Math.sqrt(square.dx * square.dx + square.dy * square.dy);
@@ -55,6 +55,9 @@ class PhysicsSystem extends BaseSystem {
             square.dy = -square.dy;
             square.y = Math.max(0, Math.min(square.y, maxY));
         }
+        
+        // Ensure velocity never exceeds maxVelocity
+        this.clampVelocity(square);
     }
     
     handleCollision(square1, square2) {

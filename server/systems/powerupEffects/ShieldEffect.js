@@ -15,18 +15,20 @@ class ShieldEffect extends BasePowerupEffect {
     
     apply(square, powerupType) {
         this.ensurePowerups(square);
-        if (!square.powerups.shield) {
-            square.powerups.shield = 0;
+        const key = powerupType.effect; // Use effect name as key
+        if (!square.powerups[key]) {
+            square.powerups[key] = 0;
         }
-        square.powerups.shield = Math.min(0.9, square.powerups.shield + powerupType.value);
+        square.powerups[key] = Math.min(0.9, square.powerups[key] + powerupType.value);
     }
     
     remove(square, powerupType) {
-        if (!square.powerups || !square.powerups.shield) return;
+        const key = powerupType.effect; // Use effect name as key
+        if (!square.powerups || !square.powerups[key]) return;
         
-        square.powerups.shield = Math.max(0, square.powerups.shield - powerupType.value);
-        if (square.powerups.shield <= 0) {
-            delete square.powerups.shield;
+        square.powerups[key] = Math.max(0, square.powerups[key] - powerupType.value);
+        if (square.powerups[key] <= 0) {
+            delete square.powerups[key];
         }
     }
 }

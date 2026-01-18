@@ -15,20 +15,35 @@ class SpeedBoostEffect extends BasePowerupEffect {
     
     apply(square, powerupType) {
         this.ensurePowerups(square);
-        if (!square.powerups.speedBoost) {
-            square.powerups.speedBoost = 1;
+        const key = powerupType.effect; // Use effect name as key
+        if (!square.powerups[key]) {
+            square.powerups[key] = 1;
         }
-        square.powerups.speedBoost *= powerupType.value;
+        square.powerups[key] *= powerupType.value;
+        
+        // Cap multiplier based on maxVelocity if it exists (like shield caps at 0.9)
+        if (square.maxVelocity != null && square.normalSpeed > 0) {
+            const maxMultiplier = square.maxVelocity / square.normalSpeed;
+            square.powerups[key] = Math.min(square.powerups[key], maxMultiplier);
+        }
         
         this.scheduleRemoval(square, powerupType);
     }
     
     remove(square, powerupType) {
-        if (!square.powerups || !square.powerups.speedBoost) return;
+        const key = powerupType.effect; // Use effect name as key
+        if (!square.powerups || !square.powerups[key]) return;
         
-        square.powerups.speedBoost /= powerupType.value;
-        if (square.powerups.speedBoost <= 1) {
-            delete square.powerups.speedBoost;
+        square.powerups[key] /= powerupType.value;
+        
+        // Cap multiplier based on maxVelocity if it exists
+        if (square.maxVelocity != null && square.normalSpeed > 0) {
+            const maxMultiplier = square.maxVelocity / square.normalSpeed;
+            square.powerups[key] = Math.min(square.powerups[key], maxMultiplier);
+        }
+        
+        if (square.powerups[key] <= 1) {
+            delete square.powerups[key];
         }
     }
 }

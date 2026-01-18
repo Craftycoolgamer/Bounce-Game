@@ -33,6 +33,88 @@ export class Renderer {
         return 30;
     }
     
+    // Convert hex color to RGB array
+    hexToRgb(hex) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? [
+            parseInt(result[1], 16),
+            parseInt(result[2], 16),
+            parseInt(result[3], 16)
+        ] : null;
+    }
+    
+    // Convert RGB array to hex color
+    rgbToHex(rgb) {
+        return '#' + rgb.map(x => {
+            const hex = Math.round(x).toString(16);
+            return hex.length === 1 ? '0' + hex : hex;
+        }).join('');
+    }
+    
+    // Combine multiple colors by averaging their RGB values
+    combineColors(colorHexes) {
+        if (!colorHexes || colorHexes.length === 0) {
+            return 'transparent';
+        }
+        
+        const rgbArrays = colorHexes.map(hex => this.hexToRgb(hex)).filter(rgb => rgb !== null);
+        if (rgbArrays.length === 0) {
+            return 'transparent';
+        }
+        
+        const combinedRgb = [
+            rgbArrays.reduce((sum, rgb) => sum + rgb[0], 0) / rgbArrays.length,
+            rgbArrays.reduce((sum, rgb) => sum + rgb[1], 0) / rgbArrays.length,
+            rgbArrays.reduce((sum, rgb) => sum + rgb[2], 0) / rgbArrays.length
+        ];
+        
+        return this.rgbToHex(combinedRgb);
+    }
+    
+    // Check if a powerup is active based on its value
+    isPowerupActive(powerupValue) {
+        // Powerups can be active if:
+        // - They're a number > 0 (for shields, multipliers, etc.)
+        // - They're truthy (for boolean flags)
+        if (typeof powerupValue === 'number') {
+            return powerupValue > 0;
+        }
+        return !!powerupValue;
+    }
+    
+    // Get border color based on active powerups (generic - handles any powerup types)
+    getBorderColorFromPowerups(powerups) {
+        if (!powerups) {
+            return 'transparent';
+        }
+        
+        const gameConfig = this.network ? this.network.getGameConfig() : null;
+        if (!gameConfig || !gameConfig.powerupTypes) {
+            return 'transparent';
+        }
+        
+        const activePowerupColors = [];
+        
+        // Iterate through all keys in the powerups object
+        // Keys now match effect names exactly (e.g., "damage", "speed", "shield")
+        for (const key in powerups) {
+            if (!this.isPowerupActive(powerups[key])) {
+                continue;
+            }
+            
+            // Find matching powerup type by effect name
+            const matchingType = gameConfig.powerupTypes.find(powerupType => 
+                powerupType.effect === key && powerupType.color
+            );
+            
+            if (matchingType) {
+                activePowerupColors.push(matchingType.color);
+            }
+        }
+        
+        return this.combineColors(activePowerupColors);
+    }
+    
     createSquare(serverSquare, myPlayerId) {
         // Skip rendering invisible spawner squares
         if (serverSquare.invisible) {
@@ -52,10 +134,16 @@ export class Renderer {
         squareElement.style.left = serverSquare.x + 'px';
         squareElement.style.top = serverSquare.y + 'px';
         
-        // Highlight player's own square
+        // Highlight player's own square and set border color based on powerups
+        const borderColor = this.getBorderColorFromPowerups(serverSquare.powerups);
         if (serverSquare.playerId === myPlayerId && !serverSquare.isSpawner) {
             squareElement.style.boxShadow = '0 0 10px 3px rgba(255, 255, 255, 0.8)';
-            squareElement.style.border = '3px solid white';
+            // Use combined powerup colors for player's own square border
+            if (borderColor !== 'transparent') {
+                squareElement.style.border = `3px solid ${borderColor}`;
+            } else {
+                squareElement.style.border = '3px solid white';
+            }
         } else {
             squareElement.style.border = '3px solid transparent';
         }
@@ -125,30 +213,22 @@ export class Renderer {
         square.healthBar.style.top = (serverSquare.y + squareSize + GameConfig.rendering.healthBarOffset) + 'px';
         
         // Update health bar color
-        const hasShield = serverSquare.powerups && serverSquare.powerups.shield;
-        square.healthBarFill.style.backgroundColor = getHealthBarColor(healthPercentage, hasShield);
+        square.healthBarFill.style.backgroundColor = getHealthBarColor(healthPercentage);
         
         // Update border color based on powerups
-        let borderColor = 'transparent';
-        if (serverSquare.powerups) {
-            const hasDamage = serverSquare.powerups.damageBoost && serverSquare.powerups.damageBoost > 1;
-            const hasSpeed = serverSquare.powerups.speedBoost && serverSquare.powerups.speedBoost > 1;
-            
-            if (hasDamage && hasSpeed) {
-                borderColor = '#FF9800';
-            } else if (hasDamage) {
-                borderColor = '#F44336';
-            } else if (hasSpeed) {
-                borderColor = '#FFEB3B';
-            }
-        }
+        const borderColor = this.getBorderColorFromPowerups(serverSquare.powerups);
         
         // Update border (but keep white border for player's own square)
         if (serverSquare.playerId === myPlayerId) {
             square.element.style.boxShadow = '0 0 10px 3px rgba(255, 255, 255, 0.8)';
-            square.element.style.border = '3px solid white';
+            // Use combined powerup colors for player's own square border
+            if (borderColor !== 'transparent') {
+                square.element.style.border = `3px solid ${borderColor}`;
+            } else {
+                square.element.style.border = '3px solid white';
+            }
         } else {
-            square.element.style.borderColor = borderColor;
+            square.element.style.border = `3px solid ${borderColor}`;
         }
         
         // Handle square death animation

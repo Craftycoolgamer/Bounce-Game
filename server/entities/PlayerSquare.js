@@ -5,12 +5,14 @@ class PlayerSquare extends BaseSquare {
         super(id, x, y, dx, dy, config);
         this.isSpawner = false;
         this.invisible = false;
-        this.size = config.size || 50;
-        this.normalSpeed = config.normalSpeed || 10;
-        this.maxVelocity = config.maxVelocity || 20;
-        this.frictionTime = config.frictionTime || 1000;
-        this.restitution = config.restitution || 0.8;
-        this.separationBias = config.separationBias || 0.01;
+        const defaultConfig = PlayerSquare.getDefaultConfig();
+        this.size = config.size ?? defaultConfig.size;
+        this.normalSpeed = config.normalSpeed ?? defaultConfig.normalSpeed;
+        this.maxVelocity = config.maxVelocity ?? defaultConfig.maxVelocity;
+        this.maxDamage = config.maxDamage ?? null;
+        this.frictionTime = config.frictionTime ?? defaultConfig.frictionTime;
+        this.restitution = config.restitution ?? defaultConfig.restitution;
+        this.separationBias = config.separationBias ?? defaultConfig.separationBias;
     }
 
     static getDefaultConfig() {
@@ -28,12 +30,21 @@ class PlayerSquare extends BaseSquare {
         };
     }
     
+    static defaultColor = '#4CAF50';
+    
     takeDamage(amount) {
         return super.takeDamage(amount);
     }
     
     getEffectiveDamage() {
-        return super.getEffectiveDamage();
+        const damage = super.getEffectiveDamage();
+        
+        // Apply maxDamage cap if it exists (including 0)
+        if (this.maxDamage != null) {
+            return Math.min(damage, this.maxDamage);
+        }
+        
+        return damage;
     }
 }
 

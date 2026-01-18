@@ -18,8 +18,12 @@ export class Network {
             onGameConfig: null,
             onPlayerJoined: null,
             onGameState: null,
-            onSquareDied: null
+            onSquareDied: null,
+            onRoomsList: null,
+            onRoomError: null
         };
+        this.rooms = [];
+        this.currentRoomId = null;
         
         // Hide stats display if disabled
         if (!SHOW_CONNECTION_STATS) {
@@ -102,6 +106,28 @@ export class Network {
                 this.callbacks.onSquareDied(data);
             }
         });
+        
+        this.socket.on('roomsList', (rooms) => {
+            this.rooms = rooms;
+            console.log('Received rooms list:', rooms);
+            if (this.callbacks.onRoomsList) {
+                this.callbacks.onRoomsList(rooms);
+            }
+        });
+        
+        this.socket.on('roomError', (error) => {
+            console.error('Room error:', error);
+            if (this.callbacks.onRoomError) {
+                this.callbacks.onRoomError(error);
+            }
+        });
+    }
+    
+    joinRoom(roomId) {
+        if (this.socket && this.socket.connected) {
+            this.currentRoomId = roomId;
+            this.socket.emit('joinRoom', roomId);
+        }
     }
     
     joinGame(playerColor) {
@@ -110,6 +136,14 @@ export class Network {
                 playerColor: playerColor
             });
         }
+    }
+    
+    getRooms() {
+        return this.rooms;
+    }
+    
+    getCurrentRoomId() {
+        return this.currentRoomId;
     }
     
     on(event, callback) {

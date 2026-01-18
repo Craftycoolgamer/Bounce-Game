@@ -34,9 +34,9 @@ class PowerupEffectRegistry {
 }
 
 class PowerupSystem extends BaseSystem {
-    constructor(eventEmitter) {
+    constructor(eventEmitter, customPowerupTypes = null) {
         super();
-        this.powerupTypes = this.getDefaultPowerupTypes();
+        this.powerupTypes = customPowerupTypes || this.getDefaultPowerupTypes();
         this.powerups = [];
         this.registry = new PowerupEffectRegistry();
         this.idGenerator = new IdGenerator();
@@ -95,24 +95,22 @@ class PowerupSystem extends BaseSystem {
     dropPowerupsFromSquare(square) {
         const activePowerups = [];
         
-        // Collect active powerups
-        if (square.powerups?.damageBoost > 1) {
-            activePowerups.push({
-                effect: 'damage',
-                type: this.powerupTypes.find(p => p.effect === 'damage')
-            });
-        }
-        if (square.powerups?.speedBoost > 1) {
-            activePowerups.push({
-                effect: 'speed',
-                type: this.powerupTypes.find(p => p.effect === 'speed')
-            });
-        }
-        if (square.powerups?.shield > 0) {
-            activePowerups.push({
-                effect: 'shield',
-                type: this.powerupTypes.find(p => p.effect === 'shield')
-            });
+        // Collect active powerups by iterating through powerup types
+        for (const powerupType of this.powerupTypes) {
+            const key = powerupType.effect;
+            const value = square.powerups?.[key];
+            
+            // Check if powerup is active (number > 0 for shields, > 1 for multipliers)
+            if (value && ((typeof value === 'number' && value > 0) || value)) {
+                // For multipliers, only drop if > 1
+                if (typeof value === 'number' && value <= 1 && value > 0) {
+                    continue; // Skip if it's a multiplier at base value (1) or shield at 0
+                }
+                activePowerups.push({
+                    effect: key,
+                    type: powerupType
+                });
+            }
         }
         
         // Drop powerups in a circle
